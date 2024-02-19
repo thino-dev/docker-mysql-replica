@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+
+mysql -u root -p"$MYSQL_ROOT_PASSWORD" <<-EOSQL
+CREATE USER IF NOT EXISTS '$REPL_USER'@'%' IDENTIFIED BY '$REPL_USER_PASSWORD';
+GRANT REPLICATION SLAVE, REPLICATION CLIENT, SELECT ON *.* TO '$REPL_USER'@'%';
+FLUSH PRIVILEGES;
+EOSQL
+
+echo 'Master database is ready for replication.'

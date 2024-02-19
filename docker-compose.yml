@@ -1,0 +1,76 @@
+version: '3.7'
+
+networks:
+    mysql-repl-network:
+        driver: bridge
+
+services:
+    mysql-repl-db-master:
+        build:
+            context: .
+            dockerfile: ./dockerize/dockerfile/mysql-master.dockerfile
+        container_name: ${DB_MASTER_HOST:-mysql-repl-db-master}
+        restart: always
+        ports:
+            - "${DB_MASTER_PORT:-39901}:3306"
+        environment:
+            #MYSQL_DATABASE: test_db
+            MYSQL_HOST: ${DB_MASTER_HOST:-mysql-repl-db-master}
+            MYSQL_ROOT_PASSWORD: ${DB_MASTER_ROOT_PASSWORD:-root}
+            TZ: Asia/Taipei
+            REPL_USER: ${REPL_USER:-repl}
+            REPL_USER_PASSWORD: ${REPL_USER_PASSWORD:-repl-password}
+        command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_general_ci"]
+        volumes:
+            - ./dockerize/data/mysql-master:/var/lib/mysql
+            - ./dockerize/conf/mysql-master/custom.cnf:/etc/mysql/conf.d/custom.cnf
+            - ./dockerize/conf/mysql-master/custom-entrypoint.sh:/usr/local/bin/custom-entrypoint.sh
+            - ./dockerize/conf/mysql-master/init-master.sh:/usr/local/bin/init-master.sh
+        networks:
+            - mysql-repl-network
+
+    mysql-repl-db-slave:
+        build:
+            context: .
+            dockerfile: ./dockerize/dockerfile/mysql-slave.dockerfile
+        container_name: ${DB_SLAVE_HOST:-mysql-repl-db-slave}
+        restart: always
+        ports:
+            - "${DB_SLAVE_PORT:-39902}:3306"
+        environment:
+            #MYSQL_DATABASE: test_db
+            MYSQL_HOST: ${DB_SLAVE_HOST:-mysql-repl-db-slave}
+            MYSQL_HOST_MASTER: ${DB_MASTER_HOST:-mysql-repl-db-master}
+            MYSQL_ROOT_PASSWORD: ${DB_SLAVE_ROOT_PASSWORD:-root}
+            TZ: Asia/Taipei
+
+            REPL_USER: ${REPL_USER:-repl}
+            REPL_USER_PASSWORD: ${REPL_USER_PASSWORD:-repl-password}
+        command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_general_ci"]
+        volumes:
+            - ./dockerize/data/mysql-slave:/var/lib/mysql
+            - ./dockerize/conf/mysql-slave/custom.cnf:/etc/mysql/conf.d/custom.cnf
+            - ./dockerize/conf/mysql-slave/custom-entrypoint.sh:/usr/local/bin/custom-entrypoint.sh
+            - ./dockerize/conf/mysql-slave/init-slave.sh:/usr/local/bin/init-slave.sh
+        networks:
+            - mysql-repl-network
+        depends_on:
+            - ${DB_MASTER_HOST:-mysql-repl-db-master}
+
+    mysql-repl-pma:
+        image: phpmyadmin/phpmyadmin:5.2
+        container_name: mysql-repl-pma
+        restart: always
+        volumes:
+            - ./dockerize/conf/phpMyAdmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php
+        ports:
+            - "${PMA_PORT:-39909}:80"
+        environment:
+            PMA_HOSTS: ${DB_MASTER_HOST:-mysql-repl-db-master},${DB_SLAVE_HOST:-mysql-repl-db-slave}
+            PMA_USER: root
+            PMA_PASSWORD: ${DB_MASTER_ROOT_PASSWORD:-root}
+        networks:
+            - mysql-repl-network
+        depends_on:
+            - ${DB_MASTER_HOST:-mysql-repl-db-master}
+            - ${DB_SLAVE_HOST:-mysql-repl-db-slave}
